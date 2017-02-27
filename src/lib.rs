@@ -13,7 +13,7 @@ type Nd = String;
 type Ed = (String, String);
 struct Edges(Vec<Ed>);
 
-pub fn render_to<W: Write>(dependency: &HashMap<String, Vec<String>>, output: &mut W) {
+pub fn render_to<W: Write>(dependency: &HashMap<String, HashSet<String>>, output: &mut W) {
     /*
     let mut all = HashSet::new();
     for (k, vs) in map {
@@ -28,7 +28,7 @@ pub fn render_to<W: Write>(dependency: &HashMap<String, Vec<String>>, output: &m
     dot::render(&edges, output).unwrap()
 }
 
-fn flatten(map: &HashMap<String, Vec<String>>) -> Vec<Ed> {
+fn flatten(map: &HashMap<String, HashSet<String>>) -> Vec<Ed> {
     let mut edges = Vec::new();
     for (k, vs) in map {
         for v in vs {

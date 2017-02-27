@@ -5,6 +5,7 @@ use argparse::{ArgumentParser, Collect, StoreTrue, Store};
 use classreader::{ConstantPoolInfo, Class, ClassReader};
 use std::fs::File;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub mod lib;
 
@@ -35,23 +36,20 @@ fn main() {
         println!("Output will be written to {}...", output);
     }
 
-    let mut dependency: HashMap<String, Vec<String>> = HashMap::new();
+    let mut dependency: HashMap<String, HashSet<String>> = HashMap::new();
     for cls in &classfiles {
         let mut file = File::open(cls).unwrap();
         let class = ClassReader::new_from_reader(&mut file).unwrap();
 
         let myname = my_name(&class);
         let mut referents = extract_referents(&class);
-        let dependents = match referents.iter().position(|e| *e == myname) {
-            Some(idx) => { referents.remove(idx); referents },
-            None => referents
-        };
+        referents.remove(&myname);
         let package = package_of(&myname);
 
         if package_internal {
-            dependency.insert(myname, filter_external_class(dependents, &package));
+            dependency.insert(myname, filter_external_class(referents, &package));
         } else {
-            dependency.insert(myname, dependents);
+            dependency.insert(myname, referents);
         }
     }
 
@@ -70,14 +68,13 @@ fn package_of(cls: &String) -> String {
     }
 }
 
-fn filter_external_class(classes: Vec<String>, package: &String) -> Vec<String> {
-    let mut retained = Vec::new();
-    for i in 0..(classes.len()) {
-        if *package == package_of(&classes[i]) {
-            retained.push(classes[i].clone());
+fn filter_external_class(classes: HashSet<String>, package: &String) -> HashSet<String> {
+    let mut retained = HashSet::new();
+    for c in classes {
+        if *package == package_of(&c) {
+            retained.insert(c.clone());
         }
     }
-
     retained
 }
 
@@ -103,11 +100,11 @@ fn my_name(class: &Class) -> String {
         .expect(format!("Failed to find this class name in {:?}", class).as_str())
 }
 
-fn extract_referents(cls: &Class) -> Vec<String> {
-    let mut referents: Vec<String> = Vec::new();
+fn extract_referents(cls: &Class) -> HashSet<String> {
+    let mut referents: HashSet<String> = HashSet::new();
     for c in &cls.constant_pool {
         class_name(c, cls).map(|name| {
-            referents.push(name);
+            referents.insert(name);
             ()
         });
     }

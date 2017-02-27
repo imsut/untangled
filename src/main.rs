@@ -80,7 +80,11 @@ fn filter_external_class(classes: HashSet<String>, package: &String) -> HashSet<
 
 
 fn canonicalize(name: &String) -> String {
-    name.replace("/", ".")
+    let fqcn = name.replace("/", ".");
+    match fqcn.find("$") {
+        Some(idx) => fqcn.split_at(idx).0.to_string(),
+        None => fqcn
+    }
 }
 
 fn class_name(cp_info: &ConstantPoolInfo, class: &Class) -> Option<String> {

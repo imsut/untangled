@@ -13,6 +13,7 @@ fn main() {
     let mut verbose = false;
     let mut package_internal = false;
     let mut output = "out.dot".to_string();
+    let mut use_fqcn = false;
     let mut classfiles: Vec<String> = Vec::new();
     {  // this block limits scope of borrows by ap.refer() method
         let mut ap = ArgumentParser::new();
@@ -26,6 +27,9 @@ fn main() {
         ap.refer(&mut package_internal).add_option(
             &["--package-internal"], StoreTrue,
             "extract package internal dependency only");
+        ap.refer(&mut use_fqcn).add_option(
+            &["--use-fqcn"], StoreTrue,
+            "Use fully-qualified-class-name for display instead of short (but unique) name");
         ap.refer(&mut classfiles).add_argument(
             "classfiles", Collect,
             "Java .class files to parse");
@@ -53,11 +57,77 @@ fn main() {
         }
     }
 
+    let deps = if use_fqcn {
+        dependency
+    } else {
+        shorten_names(&dependency)
+    };
+
     if verbose {
-        println!("dependency: {:?}", dependency);
+        println!("dependency: {:?}", deps);
     }
 
-    lib::render_to(&dependency, &mut File::create(output).unwrap());
+    lib::render_to(&deps, &mut File::create(output).unwrap());
+}
+
+fn shorten_names(dependency: &HashMap<String, HashSet<String>>) -> HashMap<String, HashSet<String>> {
+    let mut all = HashSet::new();
+    for (k, vs) in dependency {
+        all.insert(k.clone());
+        for v in vs.iter() {
+            all.insert(v.clone());
+        }
+    }
+
+    let short_names = short_name_map(&all);
+
+    let mut m = HashMap::new();
+    for (k, v) in dependency {
+        let newK = short_names.get(k).unwrap();
+        let newV = v.iter().map(|s| short_names.get(s).unwrap().clone()).collect();
+        m.insert(newK.clone(), newV);
+    }
+
+    m
+}
+
+/// Given a FQCN, first remove everything bug a simple class name plus a dot prepended
+/// (e.g. "com.example.foo.bar.Baz" -> ".Baz")
+/// If no other classes end with the string, use it with the dot removed. (e.g. "Baz")
+/// If not, get back one level of package name with a dot prepended (e.g. ".bar.Baz"),
+/// check uniqueness. If ok, use it with the dot removed (e.g. "bar.Baz")
+fn short_name_map(names: &HashSet<String>) -> HashMap<&String, String> {
+    let mut short_names = HashMap::new();
+
+    for fqcn in names {
+        let mut i = 0;
+        loop {
+            i += 1;
+            let proposed = create_short_name(fqcn, i);
+            if is_unique(&proposed, names, fqcn) {
+                short_names.insert(fqcn, proposed);
+                break;
+            }
+        }
+    }
+
+    short_names
+}
+
+
+fn create_short_name(name: &String, depth: usize) -> String {
+    let tokens: Vec<&str> = name.split(".").collect();
+    tokens.split_at(tokens.len() - depth).1.join(".")
+}
+
+fn is_unique(name: &String, names: &HashSet<String>, original: &String) -> bool {
+    for n in names {
+        if n != original && n.ends_with(name) {
+            return false;
+        }
+    }
+
+    true
 }
 
 fn package_of(cls: &String) -> String {

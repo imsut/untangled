@@ -14,16 +14,6 @@ type Ed = (String, String);
 struct Edges(Vec<Ed>);
 
 pub fn render_to<W: Write>(dependency: &HashMap<String, HashSet<String>>, output: &mut W) {
-    /*
-    let mut all = HashSet::new();
-    for (k, vs) in map {
-        all.insert(k.clone());
-        for v in vs {
-            all.insert(v.clone());
-        }
-    }
-    */
-
     let edges = Edges(flatten(dependency));
     dot::render(&edges, output).unwrap()
 }

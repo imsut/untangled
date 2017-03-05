@@ -10,3 +10,4 @@ authors = ["Ken Kawamoto <kentaro@twitter.com>"]
 argparse = "0.2.1"
 classreader = "0.2.0"
 dot = "0.1.2"
+regex = "0.2.1"

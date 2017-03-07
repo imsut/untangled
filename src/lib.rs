@@ -22,7 +22,7 @@ fn flatten(map: &HashMap<String, HashSet<String>>) -> Vec<Ed> {
     let mut edges = Vec::new();
     for (k, vs) in map {
         for v in vs {
-            edges.push((k.clone(), v.clone()));
+            edges.push((k.clone(), (*v).clone()));
         }
     }
     edges

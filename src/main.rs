@@ -2,6 +2,9 @@ extern crate argparse;
 extern crate classreader;
 extern crate regex;
 
+#[macro_use]
+extern crate lazy_static;
+
 use argparse::{ArgumentParser, Collect, Store, StoreTrue, StoreOption};
 use classreader::{ConstantPoolInfo, Class, ClassReader};
 use regex::Regex;
@@ -10,6 +13,10 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 pub mod lib;
+
+lazy_static! {
+    static ref CLASSNAME_REGEX: Regex = Regex::new("L([^<;]+)[<;]").unwrap();
+}
 
 fn main() {
     let mut verbose = false;
@@ -51,6 +58,9 @@ fn main() {
         Regex::new(&p).expect(format!("Invalid regex pattern: {}", p).as_str())
     });
 
+
+    let mut excluded = HashSet::new();
+
     let mut dependency: HashMap<String, HashSet<String>> = HashMap::new();
     for cls in &classfiles {
         let mut file = File::open(cls).unwrap();
@@ -64,10 +74,16 @@ fn main() {
 
         let referents = extract_referents(&class);
 
-        let dependents = referents.iter()
+        let dependents: HashSet<String> = referents.iter()
             .filter(|c| myname != **c)
-            .filter(|c| !(exclude_regex.as_ref().map(|r| r.is_match(&c)).unwrap_or(false)))
-            .map(|r| r.clone())
+            .filter(|c| {
+                let b = !exclude_regex.as_ref().map(|r| r.is_match(c)).unwrap_or(false);
+                if !b {
+                    excluded.insert((*c).clone());
+                }
+                b
+            })
+            .map(|c| c.clone())
             .collect();
 
         if package_internal {
@@ -78,6 +94,10 @@ fn main() {
         }
     }
 
+    for c in excluded.iter() {
+        println!("excluded: {}", c);
+    }
+
     let deps = if use_fqcn {
         dependency
     } else {
@@ -85,13 +105,16 @@ fn main() {
     };
 
     if verbose {
-        println!("dependency: {:?}", deps);
+        for (k, v) in &deps {
+            let vec: Vec<&String> = v.iter().collect();
+            println!("{} depends on {:?}", k, vec);
+        }
     }
 
     lib::render_to(&deps, &mut File::create(output).unwrap());
 }
 
-fn shorten_names(dependency: &HashMap<String, HashSet<String>>) -> HashMap<String, HashSet<String>> {
+fn shorten_names<'a>(dependency: &HashMap<String, HashSet<String>>) -> HashMap<String, HashSet<String>> {
     let mut all = HashSet::new();
     for (k, vs) in dependency {
         all.insert(k);
@@ -105,14 +128,17 @@ fn shorten_names(dependency: &HashMap<String, HashSet<String>>) -> HashMap<Strin
     let mut m = HashMap::new();
     for (k, v) in dependency {
         let new_k = short_names.get(k).unwrap();
-        let new_v = v.iter().map(|s| short_names.get(s).unwrap().clone()).collect();
+        let new_v = v.iter()
+            .map(|s| short_names.get(s).unwrap())
+            .map(|r| r.clone())
+            .collect();
         m.insert(new_k.clone(), new_v);
     }
 
     m
 }
 
-/// Given a FQCN, first remove everything bug a simple class name plus a dot prepended
+/// Given a FQCN, first remove everything but a simple class name plus a dot prepended
 /// (e.g. "com.example.foo.bar.Baz" -> ".Baz")
 /// If no other classes end with the string, use it with the dot removed. (e.g. "Baz")
 /// If not, get back one level of package name with a dot prepended (e.g. ".bar.Baz"),
@@ -142,8 +168,9 @@ fn create_short_name(name: &String, depth: usize) -> String {
 }
 
 fn is_unique(name: &String, names: &HashSet<&String>, original: &String) -> bool {
+    let dot_prepended = format!(".{}", name);
     for n in names {
-        if *n != original && n.ends_with(name) {
+        if *n != original && n.ends_with(&dot_prepended) {
             return false;
         }
     }
@@ -159,14 +186,10 @@ fn package_of(cls: &String) -> String {
     }
 }
 
-fn filter_external_class(classes: HashSet<String>, package: &String) -> HashSet<String> {
-    let mut retained = HashSet::new();
-    for c in classes {
-        if *package == package_of(&c) {
-            retained.insert(c.clone());
-        }
-    }
-    retained
+fn filter_external_class<'a>(mut classes: HashSet<String>, package: &String) -> HashSet<String> {
+    classes.drain()
+        .filter(|c| *package == package_of(c))
+        .collect()
 }
 
 
@@ -192,8 +215,7 @@ fn class_name(cp_info: &ConstantPoolInfo, class: &Class) -> Vec<String> {
 }
 
 fn extract_classnames(text: &String) -> Vec<String> {
-    let re = Regex::new("L([^<;]+)[<;]").unwrap();
-    re.captures_iter(text)
+    CLASSNAME_REGEX.captures_iter(text)
         .filter_map(|c| c.get(1).map(|m| String::from(m.as_str())))
         .map(|s| canonicalize(&s))
         .collect()

@@ -2,7 +2,7 @@
 
 name = "untangled"
 version = "0.0.1"
-authors = ["Ken Kawamoto <kentaro@twitter.com>"]
+authors = ["Ken Kawamoto <kentaro.kawamoto@gmail.com>"]
 
 
 [dependencies]
